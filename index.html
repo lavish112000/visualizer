@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multi-Dimensional Explorer</title>
+    <!-- ES Module Shim for browser compatibility with import maps. MUST be the first script. -->
+    <script src="https://unpkg.com/es-module-shims@1.10.0/dist/es-module-shims.js"></script>
+    <!-- Babel Standalone for in-browser JSX transformation -->
+    <script src="https://unpkg.com/@babel/standalone@7.24.0/babel.min.js"></script>
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      /* Basic styles to ensure full-screen layout */
+      body, html, #root {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden; /* Prevent scrollbars on the body */
+      }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <!-- Import Map for loading React and Three.js libraries from a CDN -->
+    <script type="importmap">
+      {
+        "imports": {
+          "react": "https://esm.sh/react@18.3.1",
+          "react-dom/client": "https://esm.sh/react-dom@18.3.1/client",
+          "three": "https://esm.sh/three@0.164.1",
+          "@react-three/fiber": "https://esm.sh/@react-three/fiber@8.16.6",
+          "@react-three/drei": "https://esm.sh/@react-three/drei@9.105.6",
+          "framer-motion": "https://esm.sh/framer-motion@11.2.6"
+        }
+      }
+    </script>
+
+    <!-- Main React application script, type="text/babel" for JSX transformation -->
+    <script type="text/babel" data-type="module">
+        import React, { useMemo, useRef, useState } from "react";
+        import ReactDOM from "react-dom/client";
+        import { Canvas, useFrame } from "@react-three/fiber";
+        import { OrbitControls, Html } from "@react-three/drei";
+        import { motion } from "framer-motion";
+
+        // MotionExplain component for the animated explainer text
+        function MotionExplain() {
+            return (
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="p-3 bg-slate-800/30 rounded">
+                <h4 className="font-semibold">Quick explainer (kid-friendly)</h4>
+                <p className="text-sm opacity-80">Imagine a square (2D) and a cube (3D). A cube casts a square-shaped shadow — that shadow is the 2D view of a 3D thing. Now replace square→cube and cube→tesseract (4D): the 3D world you see is like a shadow of a 4D shape. This explorer lets you rotate that 4D shape and watch its 3D shadow change.</p>
+                </motion.div>
+            );
+        }
+
+        // Scene component renders the projected N-dimensional points and edges
+        function Scene({ dimension, angleControls, projectionScale, autoRotate }) {
+            const group = useRef();
+
+            // Build vertices of an N-cube centered at origin, edge length 2 -> coords ±1
+            const verts = useMemo(() => {
+                const n = dimension;
+                const points = [];
+                const total = 1 << n; // 2^n
+                for (let i = 0; i < total; i++) {
+                const v = [];
+                for (let d = 0; d < n; d++) v.push(((i >> d) & 1) ? 1 : -1);
+                points.push(v);
+                }
+                return points;
+            }, [dimension]);
+
+            // Edges: two vertices differ by exactly one coordinate
+            const edges = useMemo(() => {
+                const edgeList = [];
+                for (let i = 0; i < verts.length; i++) {
+                for (let j = i + 1; j < verts.length; j++) {
+                    let diff = 0;
+                    for (let d = 0; d < dimension; d++) if (verts[i][d] !== verts[j][d]) diff++;
+                    if (diff === 1) edgeList.push([i, j]);
+                }
+                }
+                return edgeList;
+            }, [verts, dimension]);
+
+            // Compute the full rotation matrix for n-dimensions by multiplying plane rotations
+            const rotationMatrix = useMemo(() => {
+                const n = dimension;
+                // Initialize as identity matrix
+                const R = Array.from({ length: n }, (_, i) => Array.from({ length: n }, (_, j) => (i === j ? 1 : 0)));
+
+                // For each plane with a non-zero angle, build a plane rotation and multiply it in
+                Object.entries(angleControls).forEach(([k, angle]) => {
+                if (angle === 0) return;
+                const [iStr, jStr] = k.split("-");
+                const i = parseInt(iStr, 10);
+                const j = parseInt(jStr, 10);
+                if (i >= n || j >= n) return; // Skip planes outside the current dimension
+                const c = Math.cos(angle);
+                const s = Math.sin(angle);
+                
+                // Plane rotation matrix P (identity except for a 2x2 block)
+                const P = Array.from({ length: n }, (_, a) => Array.from({ length: n }, (_, b) => (a === b ? 1 : 0)));
+                P[i][i] = c; P[j][j] = c; P[i][j] = -s; P[j][i] = s;
+                
+                // Multiply R = P * R (apply this rotation before others)
+                const NR = Array.from({ length: n }, () => Array.from({ length: n }, () => 0));
+                for (let a = 0; a < n; a++) for (let b = 0; b < n; b++) for (let c2 = 0; c2 < n; c2++) NR[a][b] += P[a][c2] * R[c2][b];
+                for (let a = 0; a < n; a++) for (let b = 0; b < n; b++) R[a][b] = NR[a][b];
+                });
+
+                return R;
+            }, [angleControls, dimension]);
+
+            // Project an n-dimensional point to 3D space
+            function projectPoint(pt) {
+                const n = dimension;
+                const R = rotationMatrix;
+                // Apply rotation
+                const rotated = Array(n).fill(0);
+                for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) rotated[i] += R[i][j] * pt[j];
+
+                // Simple perspective projection
+                let x = rotated[0] ?? 0;
+                let y = rotated[1] ?? 0;
+                let z = rotated[2] ?? 0;
+
+                if (n > 3) {
+                    // Use remaining coordinates to create a 'depth' effect
+                    let extraDepth = 0;
+                    for (let k = 3; k < n; k++) extraDepth += rotated[k];
+                    
+                    const scale = projectionScale * (2 / (2 + extraDepth));
+                    x *= scale; y *= scale; z *= scale - extraDepth * 0.05;
+                }
+                return [x, y, z];
+            }
+
+            // Store the projected vertices
+            const projected = useMemo(() => verts.map((v) => projectPoint(v)), [verts, rotationMatrix, projectionScale]);
+
+            // Animate the group rotation if auto-rotate is enabled
+            useFrame((state, delta) => {
+                if (!group.current) return;
+                if (autoRotate) group.current.rotation.y += delta * 0.25;
+            });
+
+            return (
+                <group ref={group}>
+                {/* Draw edges as thin lines */}
+                {edges.map(([i, j], idx) => {
+                    const a = projected[i];
+                    const b = projected[j];
+                    return (
+                    <line key={idx}>
+                        <bufferGeometry>
+                        <bufferAttribute
+                            attach="attributes-position"
+                            count={2}
+                            array={new Float32Array([...a, ...b])}
+                            itemSize={3}
+                        />
+                        </bufferGeometry>
+                        <lineBasicMaterial color="white" linewidth={1} />
+                    </line>
+                    );
+                })}
+
+                {/* Draw vertices as small spheres with labels */}
+                {projected.map((p, i) => (
+                    <mesh key={i} position={p}>
+                    <sphereGeometry args={[0.06, 16, 16]} />
+                    <meshStandardMaterial color="skyblue" metalness={0.3} roughness={0.2} />
+                    <Html center>
+                        <div className="text-[10px] text-white bg-slate-900/60 rounded px-1 py-0.5 select-none">{i}</div>
+                    </Html>
+                    </mesh>
+                ))}
+                </group>
+            );
+        }
+
+        // Main App Component: MultiDimExplorer
+        function App() {
+            const [dimension, setDimension] = useState(4);
+            const [projectionScale, setProjectionScale] = useState(1.0);
+            const [autoRotate, setAutoRotate] = useState(true);
+            const [angleControls, setAngleControls] = useState(() => ({}));
+            const [preset, setPreset] = useState("classic");
+
+            // Generate a list of rotation plane keys (e.g., "0-1", "0-2") for the current dimension
+            const planeKeys = useMemo(() => {
+                const keys = [];
+                for (let i = 0; i < dimension; i++) {
+                for (let j = i + 1; j < dimension; j++) keys.push(`${i}-${j}`);
+                }
+                return keys;
+            }, [dimension]);
+
+            // Ensure we have initial angleControls for all planes when dimension changes
+            React.useEffect(() => {
+                setAngleControls((prev) => {
+                const next = {};
+                planeKeys.forEach((k) => (next[k] = prev[k] ?? 0));
+                return next;
+                });
+            }, [planeKeys]);
+
+            function resetAngles() {
+                const next = {};
+                planeKeys.forEach((k) => (next[k] = 0));
+                setAngleControls(next);
+            }
+
+            function randomizeAngles() {
+                const next = {};
+                planeKeys.forEach((k) => (next[k] = (Math.random() - 0.5) * Math.PI));
+                setAngleControls(next);
+            }
+            
+            // Handle presets
+            React.useEffect(() => {
+                if (preset === "classic") resetAngles();
+                if (preset === "twist") {
+                const next = {};
+                planeKeys.forEach((k, idx) => (next[k] = ((idx + 1) % 2 === 0 ? 0.6 : -0.6)));
+                setAngleControls(next);
+                }
+                if (preset === "random") randomizeAngles();
+            }, [preset, planeKeys]); // Rerun when planeKeys change too
+
+            return (
+                <div className="w-full h-full bg-gradient-to-b from-slate-900 to-slate-800 text-slate-100 font-sans">
+                <div className="max-w-7xl mx-auto p-4 md:p-6 grid grid-cols-1 lg:grid-cols-3 gap-6 h-full">
+                    
+                    {/* 3D Canvas Column */}
+                    <div className="lg:col-span-2 bg-slate-900/40 rounded-2xl shadow-2xl flex flex-col min-h-0">
+                        <div className="flex items-center justify-between p-4 flex-shrink-0">
+                            <h2 className="text-2xl font-semibold">MultiDim Explorer</h2>
+                            <div className="text-sm opacity-80">Dimension: {dimension}D</div>
+                        </div>
+
+                        <div className="flex-1 rounded-b-2xl overflow-hidden border-t border-slate-700">
+                            <Canvas camera={{ position: [3, 3, 6], fov: 50 }}>
+                            <ambientLight intensity={0.8} />
+                            <directionalLight position={[5, 5, 5]} intensity={0.6} />
+                            <Scene
+                                dimension={dimension}
+                                angleControls={angleControls}
+                                projectionScale={projectionScale}
+                                autoRotate={autoRotate}
+                            />
+                            <OrbitControls enablePan={true} enableZoom={true} />
+                            </Canvas>
+                        </div>
+
+                        <div className="p-4 flex flex-wrap gap-4 items-center justify-between border-t border-slate-700">
+                            <div className="flex gap-4 items-center">
+                                <label className="flex items-center gap-2 text-sm cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={autoRotate}
+                                        onChange={(e) => setAutoRotate(e.target.checked)}
+                                        className="accent-sky-400"
+                                    />
+                                    <span>Auto rotate</span>
+                                </label>
+                                <label className="flex items-center gap-2 text-sm">
+                                    <span>Scale</span>
+                                    <input
+                                        type="range"
+                                        min={0.3}
+                                        max={2}
+                                        step={0.01}
+                                        value={projectionScale}
+                                        onChange={(e) => setProjectionScale(parseFloat(e.target.value))}
+                                        className="w-24 md:w-36"
+                                    />
+                                </label>
+                            </div>
+                            <div className="flex gap-2">
+                                <button onClick={() => setPreset("classic")} className="px-3 py-1 text-sm rounded bg-sky-600/80 hover:bg-sky-600 transition-colors">Classic</button>
+                                <button onClick={() => setPreset("twist")} className="px-3 py-1 text-sm rounded bg-purple-600/80 hover:bg-purple-600 transition-colors">Twist</button>
+                                <button onClick={() => setPreset("random")} className="px-3 py-1 text-sm rounded bg-rose-600/80 hover:bg-rose-600 transition-colors">Random</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Controls Column */}
+                    <div className="bg-slate-900/40 rounded-2xl shadow-2xl flex flex-col gap-4 p-4 min-h-0">
+                        <div>
+                            <label className="block text-sm font-medium">Choose dimension</label>
+                            <select
+                                value={dimension}
+                                onChange={(e) => setDimension(parseInt(e.target.value))}
+                                className="w-full mt-2 p-2 rounded bg-slate-800 border border-slate-700 focus:ring-2 focus:ring-sky-500 outline-none"
+                            >
+                                <option value={3}>3D (Cube)</option>
+                                <option value={4}>4D (Tesseract)</option>
+                                <option value={5}>5D (Penteract)</option>
+                                <option value={6}>6D (Hexeract)</option>
+                            </select>
+                        </div>
+
+                        <div className="flex flex-col gap-2 flex-1 min-h-0">
+                            <h3 className="text-lg font-medium">Rotation Planes</h3>
+                            <p className="text-xs opacity-80">Drag sliders to rotate the object in its hyperplanes. Showing the first 10 controls.</p>
+                            <div className="overflow-auto p-2 rounded border border-slate-700 bg-black/20 flex-1">
+                                <div className="grid grid-cols-1 gap-2">
+                                {planeKeys.slice(0, 10).map((k) => (
+                                    <label key={k} className="flex items-center gap-2">
+                                    <div className="w-16 text-xs font-mono">{k}</div>
+                                    <input
+                                        type="range"
+                                        min={-Math.PI}
+                                        max={Math.PI}
+                                        step={0.01}
+                                        value={angleControls[k] ?? 0}
+                                        onChange={(e) => setAngleControls({ ...angleControls, [k]: parseFloat(e.target.value) })}
+                                        className="flex-1"
+                                    />
+                                    <div className="w-12 text-right text-xs font-mono">{(angleControls[k] ?? 0).toFixed(2)}</div>
+                                    </label>
+                                ))}
+                                </div>
+                            </div>
+                             <div className="mt-2 flex gap-2">
+                                <button onClick={resetAngles} className="px-3 py-1 text-sm rounded bg-slate-600/80 hover:bg-slate-600 w-full">Reset Angles</button>
+                                <button onClick={randomizeAngles} className="px-3 py-1 text-sm rounded bg-emerald-600/80 hover:bg-emerald-600 w-full">Randomize</button>
+                            </div>
+                        </div>
+
+                        <MotionExplain />
+
+                        <div className="text-xs opacity-80 mt-auto flex-shrink-0">
+                            <strong>Tip:</strong> A 4D object is to a 3D object what a 3D object is to its 2D shadow. You are seeing a 3D "shadow" of a higher-dimensional shape.
+                        </div>
+                    </div>
+                </div>
+                </div>
+            );
+        }
+
+        // Render the main App component into the #root div
+        const container = document.getElementById('root');
+        const root = ReactDOM.createRoot(container);
+        root.render(<App />);
+
+    </script>
+</body>
+</html>
+
