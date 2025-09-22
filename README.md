@@ -7,3 +7,6 @@ Radix UI: A low-level, unstyled component library that provides accessible and c
 NextUI: A modern, fast, and accessible React UI library built on top of React Aria and Stitches.
 For Animation Libraries (with a focus on visual effects):
 Framer Motion: A production-ready animation library for React, making it easy to create complex animations and gestures.
+Aity UI: Focuses on creating modern-looking applications with animations, offering features like UI elements, spotlights, and background effects.
+For Specific UI Needs (e.g., dashboards, charts):
+Tremor: A React library specifically designed for building dashboards quickly, providing components like charts and data visualization elements.
