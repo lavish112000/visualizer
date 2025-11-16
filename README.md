@@ -10,6 +10,6 @@ Framer Motion: A production-ready animation library for React, making it easy to
 Aity UI: Focuses on creating modern-looking applications with animations, offering features like UI elements, spotlights, and background effects.
 For Specific UI Needs (e.g., dashboards, charts):
 Tremor: A React library specifically designed for building dashboards quickly, providing components like chart and data visualization element.
-   
+     
   
 
