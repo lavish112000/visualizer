@@ -33,8 +33,10 @@ func main() {
 	chatHandler := &api.ChatHandler{Store: store}
 	mediaHandler := &api.MediaHandler{Store: store}
 
-	http.HandleFunc("/auth/register", authHandler.Register)
-	http.HandleFunc("/auth/login", authHandler.Login)
+	http.HandleFunc("/auth/register/init", authHandler.RegisterInit)
+	http.HandleFunc("/auth/register/verify", authHandler.RegisterVerify)
+	http.HandleFunc("/auth/login/init", authHandler.LoginInit)
+	http.HandleFunc("/auth/login/verify", authHandler.LoginVerify)
 
 	http.HandleFunc("/keys/upload", api.AuthMiddleware(keysHandler.UploadKeys))
 	http.HandleFunc("/keys/query", api.AuthMiddleware(keysHandler.GetPreKeyBundle))
@@ -59,5 +61,6 @@ func main() {
 	})
 
 	// 5. Start Server
-	log.Fatal(http.ListenAndServe(":"+cfg.ServerPort, nil))
+	// 5. Start Server
+	log.Fatal(http.ListenAndServe(":"+cfg.ServerPort, api.CORSMiddleware(http.DefaultServeMux)))
 }
