@@ -87,6 +87,9 @@ export class SignalService {
         }
     }
 
+    getPreKeys() { return this.store['preKeys'] }
+    getSignedPreKeys() { return this.store['signedPreKeys'] }
+
     async hasSession(recipientId: string): Promise<boolean> {
         const address = new SignalProtocolAddress(recipientId, 1)
         return this.store.hasSession(address.toString())
@@ -122,5 +125,25 @@ export class SignalService {
         }
 
         return new TextDecoder().decode(plaintext)
+    }
+
+    static arrayBufferToBase64(buffer: ArrayBuffer): string {
+        let binary = '';
+        const bytes = new Uint8Array(buffer);
+        const len = bytes.byteLength;
+        for (let i = 0; i < len; i++) {
+            binary += String.fromCharCode(bytes[i]);
+        }
+        return btoa(binary);
+    }
+
+    static base64ToArrayBuffer(base64: string): ArrayBuffer {
+        const binary_string = atob(base64);
+        const len = binary_string.length;
+        const bytes = new Uint8Array(len);
+        for (let i = 0; i < len; i++) {
+            bytes[i] = binary_string.charCodeAt(i);
+        }
+        return bytes.buffer;
     }
 }
