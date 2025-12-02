@@ -1,3 +1,7 @@
+import './polyfills';
+if (typeof window !== 'undefined') {
+    console.log("App starting...");
+}
 import { registerRootComponent } from 'expo';
 
 import App from './App';
