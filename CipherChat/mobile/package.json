@@ -9,18 +9,27 @@
     "web": "expo start --web"
   },
   "dependencies": {
+    "@lottiefiles/dotlottie-react": "^0.17.8",
     "@nozbe/watermelondb": "^0.28.0",
     "@privacyresearch/libsignal-protocol-typescript": "^0.0.16",
     "@react-native-async-storage/async-storage": "^2.2.0",
+    "buffer": "^6.0.3",
+    "events": "^3.3.0",
     "expo": "~54.0.25",
     "expo-crypto": "^15.0.7",
     "expo-file-system": "^19.0.19",
     "expo-image": "^3.0.10",
     "expo-status-bar": "~3.0.8",
+    "lokijs": "^1.5.12",
     "lottie-react-native": "^7.3.4",
+    "process": "^0.11.10",
     "protobufjs": "^7.5.4",
     "react": "19.1.0",
-    "react-native": "0.81.5"
+    "react-dom": "19.1.0",
+    "react-native": "0.81.5",
+    "react-native-get-random-values": "^2.0.0",
+    "react-native-web": "^0.19.13",
+    "readable-stream": "^4.7.0"
   },
   "devDependencies": {
     "@babel/plugin-proposal-decorators": "^7.28.0",
