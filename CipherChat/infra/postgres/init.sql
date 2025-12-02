@@ -3,6 +3,7 @@ CREATE TABLE IF NOT EXISTS users (
     user_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     phone_number VARCHAR(20) UNIQUE NOT NULL,
     username VARCHAR(32) UNIQUE,
+    password_hash VARCHAR(255), -- Nullable for now to support existing users? Or we wipe.
     identity_public_key BYTEA NOT NULL,
     registration_id INT NOT NULL,
     last_seen_at TIMESTAMP,
