@@ -1,0 +1,47 @@
+syntax = "proto3";
+
+package chat;
+
+option go_package = "github.com/cipherchat/backend/pb";
+
+// The top-level wrapper for all WebSocket messages
+message WebSocketMessage {
+  string request_id = 1; // For matching responses
+  oneof payload {
+    SignalMessage signal_message = 2;
+    DeliveryReceipt delivery_receipt = 3;
+    TypingIndicator typing_indicator = 4;
+    SyncRequest sync_request = 5;
+    SyncResponse sync_response = 6;
+  }
+}
+
+// An encrypted message payload (Signal Protocol)
+message SignalMessage {
+  string recipient_id = 1; // UUID
+  bytes ciphertext = 2; // Encrypted blob (includes header)
+  string message_id = 3; // TimeUUID (assigned by client or server?) Usually client generates ID for idempotency
+  int64 timestamp = 4;
+  string sender_id = 5;
+}
+
+message DeliveryReceipt {
+  string message_id = 1;
+  string sender_id = 2;
+  int64 timestamp = 3;
+}
+
+message TypingIndicator {
+  string conversation_id = 1;
+  bool is_typing = 2;
+}
+
+message SyncRequest {
+  string last_message_id = 1; // Sync from this point
+  int32 limit = 2;
+}
+
+message SyncResponse {
+  repeated SignalMessage messages = 1;
+  bool has_more = 2;
+}
