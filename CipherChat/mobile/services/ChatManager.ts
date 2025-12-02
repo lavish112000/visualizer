@@ -9,8 +9,11 @@ export class ChatManager {
     private wsClient: WebSocketClient
     private userId: string
 
-    constructor(userId: string, signalService: SignalService, wsClient: WebSocketClient) {
+    private token: string
+
+    constructor(userId: string, token: string, signalService: SignalService, wsClient: WebSocketClient) {
         this.userId = userId
+        this.token = token
         this.signalService = signalService
         this.wsClient = wsClient
 
@@ -22,12 +25,44 @@ export class ChatManager {
         const hasSession = await this.signalService.hasSession(recipientId)
         if (!hasSession) {
             console.log(`No session with ${recipientId}, fetching keys...`)
-            // In a real app, fetch from server:
-            // const bundle = await fetch(`http://10.0.2.2:8080/keys/query?user_id=${recipientId}`).then(r => r.json())
-            // await this.signalService.processPreKeyBundle(recipientId, bundle)
+            try {
+                const response = await fetch(`http://localhost:8080/keys/query?user_id=${recipientId}`, {
+                    headers: {
+                        'Authorization': `Bearer ${this.token}`
+                    }
+                })
 
-            // For prototype, we assume keys are pre-shared or we skip encryption if no keys found (fallback)
-            console.warn("Skipping key fetch in prototype. Encryption might fail if not pre-seeded.")
+                if (!response.ok) {
+                    throw new Error(`Key fetch failed: ${response.statusText}`)
+                }
+
+                const bundle = await response.json()
+
+                // Process bundle
+                // The bundle structure from backend:
+                // { identity_key: base64, signed_pre_key: { key_id, public_key: base64, signature: base64 }, one_time_pre_key: { key_id, public_key: base64 }, registration_id }
+
+                const processedBundle = {
+                    identityKey: SignalService.base64ToArrayBuffer(bundle.identity_key),
+                    registrationId: bundle.registration_id,
+                    signedPreKey: {
+                        keyId: bundle.signed_pre_key.key_id,
+                        publicKey: SignalService.base64ToArrayBuffer(bundle.signed_pre_key.public_key),
+                        signature: SignalService.base64ToArrayBuffer(bundle.signed_pre_key.signature)
+                    },
+                    preKey: bundle.one_time_pre_key && bundle.one_time_pre_key.key_id ? {
+                        keyId: bundle.one_time_pre_key.key_id,
+                        publicKey: SignalService.base64ToArrayBuffer(bundle.one_time_pre_key.public_key)
+                    } : undefined
+                }
+
+                await this.signalService.processPreKeyBundle(recipientId, processedBundle)
+                console.log(`Session established with ${recipientId}`)
+
+            } catch (e) {
+                console.error("Key fetch failed", e)
+                throw e // Re-throw to stop sending
+            }
         }
 
         // 2. Encrypt
