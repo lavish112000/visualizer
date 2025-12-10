@@ -5,7 +5,7 @@
 ---
 
 ## ⚡ Quick Start (3 Steps, 5 Minutes)
-
+ 
 ### Step 1: Open PowerShell Terminal #1
 ```powershell
 cd C:\Users\Lavish\visualizer\CipherChat\backend
